@@ -62,7 +62,7 @@ Always use `--raw` flag for multi-agent runs — suppresses the ASCII banner and
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--file` | none | File path or glob pattern to include as context (repeatable) |
-| `--agent` | off | Enable file system tools -- Gemma can autonomously read files, list dirs, search |
+| `--no-agent` | off | Disable agent tools (agent mode is ON by default) |
 | `--system` | none | System instruction / Persona |
 | `--temperature` | 0.7 | Generation temperature -- do NOT change unless user asks |
 | `--max-tokens` | 8192 | Maximum output tokens generated |
@@ -71,10 +71,12 @@ Always use `--raw` flag for multi-agent runs — suppresses the ASCII banner and
 | `--no-banner` | off | Hide ASCII banner |
 | `--raw` | off | Raw output, no formatting |
 
-## --file vs --agent
+## --file vs agent mode
 
-- `--file`: Pre-loads specific files into the prompt. Use when you know exactly which files are relevant.
-- `--agent`: Gives Gemma read-only file system tools (read_file, list_directory, search_files). Gemma decides what to read. Use when you don't know which files matter, or Gemma needs to explore.
+Agent mode (file system + web + Google Search) is **on by default**. Use `--no-agent` to disable it.
+
+- `--file`: Pre-loads specific files directly into the prompt. Use when you know exactly which files are relevant.
+- Agent mode (default): Gemma gets read-only file system tools (read_file, list_directory, search_files, grep_files), web access (fetch_url), and Google Search. Gemma decides what to read/search.
 
 ## When to use
 

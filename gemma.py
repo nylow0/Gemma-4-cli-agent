@@ -2,6 +2,7 @@ import argparse
 import glob
 import os
 import random
+import re
 import shutil
 import sys
 import time
@@ -160,7 +161,52 @@ def search_files(pattern: str, directory: str = ".") -> str:
     except Exception as e:
         return f"Error searching: {e}"
 
-AGENT_TOOLS = [read_file, list_directory, search_files]
+def grep_files(pattern: str, directory: str = ".", file_glob: str = "**/*") -> str:
+    """Search file contents for lines matching a regex pattern. Returns matching lines with file paths and line numbers."""
+    try:
+        matches = []
+        for filepath in glob.glob(os.path.join(directory, file_glob), recursive=True):
+            if not os.path.isfile(filepath):
+                continue
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    for i, line in enumerate(f, 1):
+                        if re.search(pattern, line):
+                            matches.append(f"{filepath}:{i}: {line.rstrip()}")
+                            if len(matches) >= MAX_SEARCH_RESULTS:
+                                return "\n".join(matches) + f"\n[... truncated at {MAX_SEARCH_RESULTS} matches]"
+            except (OSError, IOError):
+                continue
+        return "\n".join(matches) if matches else f"No matches for pattern '{pattern}'"
+    except Exception as e:
+        return f"Error searching: {e}"
+
+MAX_URL_CHARS = 80_000
+
+def fetch_url(url: str) -> str:
+    """Fetch a webpage at the given URL and return its text content with HTML tags stripped."""
+    try:
+        import urllib.request
+        import html as html_mod
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; GemmaAgent/1.0)",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        # Strip script/style blocks, convert block tags to newlines, remove remaining tags
+        text = re.sub(r'<(script|style|noscript)[^>]*>.*?</\1>', '', raw, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'</(p|div|h[1-6]|li|tr)>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<br[^>]*/?>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = html_mod.unescape(text)
+        text = re.sub(r'\n{3,}', '\n\n', text).strip()
+        if len(text) > MAX_URL_CHARS:
+            text = text[:MAX_URL_CHARS] + f"\n\n[... truncated, page is {len(text)} chars ...]"
+        return text
+    except Exception as e:
+        return f"Error fetching URL: {e}"
+
+AGENT_TOOLS = [read_file, list_directory, search_files, grep_files, fetch_url]
 
 MAX_RETRIES = 5
 
@@ -180,6 +226,16 @@ def _retry_wait(attempt):
     """Exponential backoff with jitter."""
     base = 2 ** attempt
     return base + random.uniform(0, base)
+
+def _response_text(response) -> str:
+    """Extract text from a response without triggering SDK warnings about non-text parts."""
+    try:
+        return "".join(
+            p.text for p in response.candidates[0].content.parts
+            if hasattr(p, "text") and p.text
+        )
+    except (AttributeError, IndexError):
+        return ""
 
 def _execute_tool(function_call):
     """Execute a function call from the model and return the result string."""
@@ -234,7 +290,7 @@ def _agent_generate(client, model, contents, config, is_tty):
             break
 
     elapsed = time.time() - t0
-    text = response.text or ""
+    text = _response_text(response)
     prompt_tokens = 0
     response_tokens = 0
     if hasattr(response, "usage_metadata") and response.usage_metadata:
@@ -260,9 +316,10 @@ def main():
     parser.add_argument("--no-stream", action="store_true", help="Disable streaming")
     parser.add_argument("--no-banner", action="store_true", help="Hide ASCII banner")
     parser.add_argument("--raw", action="store_true", help="Raw output, no formatting")
-    parser.add_argument("--agent", action="store_true",
-                        help="Enable file system tools (read, list, search)")
+    parser.add_argument("--no-agent", action="store_true",
+                        help="Disable agent tools (file system, web, Google search)")
     args = parser.parse_args()
+    args.agent = not args.no_agent
 
     # Determine display mode
     global USE_COLOR
@@ -291,15 +348,31 @@ def main():
     if args.system:
         config.system_instruction = args.system
 
-    # Agent mode: attach file system tools
+    # Agent mode: attach tools (file system + web + google search)
     if args.agent:
-        config.tools = AGENT_TOOLS
+        try:
+            config.tools = [
+                types.Tool(google_search=types.GoogleSearch()),
+                *AGENT_TOOLS,
+            ]
+            config.tool_config = types.ToolConfig(
+                include_server_side_tool_invocations=True,
+            )
+        except (AttributeError, TypeError):
+            # google_search not supported for this model/SDK version — use function tools only
+            config.tools = AGENT_TOOLS
         cwd = os.getcwd()
         tool_hint = (
-            f"You have read-only access to the user's file system. "
-            f"Current working directory: {cwd}\n"
-            f"Use the available tools (read_file, list_directory, search_files) "
-            f"to browse and read files when needed to answer the user's question."
+            f"You are an autonomous agent with read-only access to the user's file system and the internet.\n"
+            f"Current working directory: {cwd}\n\n"
+            f"Available tools:\n"
+            f"- read_file(path): Read a file's contents\n"
+            f"- list_directory(path): List files and subdirectories\n"
+            f"- search_files(pattern, directory): Find files by glob pattern\n"
+            f"- grep_files(pattern, directory, file_glob): Search file contents by regex\n"
+            f"- fetch_url(url): Fetch a webpage and return its text\n"
+            f"- google_search: Search Google for information (built-in)\n\n"
+            f"Use these tools proactively to explore, research, and answer thoroughly."
         )
         if config.system_instruction:
             config.system_instruction = tool_hint + "\n\n" + config.system_instruction
@@ -342,7 +415,7 @@ def main():
                     # Agent mode uses non-streaming to support tool calls
                     response = chat.send_message(user_msg)
                     elapsed = time.time() - t0
-                    text = response.text or ""
+                    text = _response_text(response)
                     print(text, end="")
                     if hasattr(response, "usage_metadata") and response.usage_metadata:
                         prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
@@ -361,7 +434,7 @@ def main():
                 else:
                     response = chat.send_message(user_msg)
                     elapsed = time.time() - t0
-                    text = response.text or ""
+                    text = _response_text(response)
                     print(text, end="")
                     if hasattr(response, "usage_metadata") and response.usage_metadata:
                         prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
@@ -414,7 +487,7 @@ def main():
                         model=model, contents=prompt, config=config,
                     )
                     elapsed = time.time() - t0
-                    text = response.text or ""
+                    text = _response_text(response)
                     print(text, end="")
                     if hasattr(response, "usage_metadata") and response.usage_metadata:
                         prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
