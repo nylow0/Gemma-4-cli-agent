@@ -2,7 +2,7 @@
 
 So I created this thing to use multiple instances of Gemma 4 model in parallel for better optimization of my workflow. Since my hardware ain't that good, have to use a google api, which is luckily pretty generous for my purposes.
 
-The inintial idea for this was to create a cli which can be called from claude code to have multiple cheap and effective subagents to work in parallel, so I also added a skill for it lol.
+The initial idea for this was to create a cli which can be called from claude code to have multiple cheap and effective subagents to work in parallel, so I also added a skill for it lol.
 
 ### Little note
 This one was mostly written using Claude Code.
