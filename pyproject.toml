@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gemma-skill"
+version = "0.2.0"
+description = "Call Gemma 4 31B via Google AI Studio"
+requires-python = ">=3.10"
+dependencies = ["google-genai"]
+
+[project.scripts]
+gemma = "gemma:main"
+
+[tool.setuptools]
+py-modules = ["gemma"]

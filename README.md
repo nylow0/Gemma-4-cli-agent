@@ -2,7 +2,7 @@
 
 A lightweight CLI tool for running Gemma 4 31B through Google AI Studio. I built it as a Claude Code skill for parallelizing workflows — delegate tasks, etc.
 
-Supports reading files and glob patterns directly as context, so Gemma can reason over your codebase without manual copy-pasting. Also the api of this is pretty generous, so it's good since I'm a broke student lol.
+Supports reading files and glob patterns directly as context, so Gemma can reason over your codebase without manual copy-pasting. Also the free tier api of this model is pretty generous, so it's useful af since I'm a broke student lol.
 
 ```
 ╔════════════════════════════════════════════════════╗
@@ -80,4 +80,4 @@ This repo doubles as a [Claude Code](https://claude.ai/claude-code) skill. Add i
 
 ## Note
 
-Was made with claude code.
+Was made with by me and my fellow claude code lmao.

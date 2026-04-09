@@ -119,6 +119,108 @@ def _resolve_files(patterns):
             print(f"Warning: could not read '{filepath}': {e}", file=sys.stderr)
     return "\n\n".join(blocks)
 
+# File system tools (for --agent mode)
+
+MAX_FILE_CHARS = 100_000
+MAX_SEARCH_RESULTS = 200
+
+def read_file(path: str) -> str:
+    """Read the contents of a file at the given path and return the text."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        if len(content) > MAX_FILE_CHARS:
+            content = content[:MAX_FILE_CHARS] + f"\n\n[... truncated, file is {len(content)} chars ...]"
+        return content
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+def list_directory(path: str) -> str:
+    """List all files and directories at the given path. Returns one entry per line with [DIR] prefix for directories."""
+    try:
+        entries = []
+        for entry in sorted(os.listdir(path)):
+            full = os.path.join(path, entry)
+            prefix = "[DIR]  " if os.path.isdir(full) else "       "
+            entries.append(f"{prefix}{entry}")
+        return "\n".join(entries) if entries else "(empty directory)"
+    except Exception as e:
+        return f"Error listing directory: {e}"
+
+def search_files(pattern: str, directory: str = ".") -> str:
+    """Search for files matching a glob pattern recursively starting from directory. Returns matching file paths."""
+    try:
+        matches = glob.glob(os.path.join(directory, pattern), recursive=True)
+        if not matches:
+            return f"No files matched pattern '{pattern}' in '{directory}'"
+        return "\n".join(sorted(matches[:MAX_SEARCH_RESULTS]))
+    except Exception as e:
+        return f"Error searching: {e}"
+
+AGENT_TOOLS = [read_file, list_directory, search_files]
+
+def _execute_tool(function_call):
+    """Execute a function call from the model and return the result string."""
+    name = function_call.name
+    args = dict(function_call.args) if function_call.args else {}
+    func_map = {f.__name__: f for f in AGENT_TOOLS}
+    fn = func_map.get(name)
+    if not fn:
+        return f"Unknown tool: {name}"
+    return fn(**args)
+
+def _agent_generate(client, model, contents, config, is_tty):
+    """Run a generate-then-tool-call loop until the model produces a text-only response."""
+    from google.genai import types
+
+    t0 = time.time()
+    tool_calls_made = []
+
+    while True:
+        response = client.models.generate_content(
+            model=model, contents=contents, config=config,
+        )
+
+        # Check if the response contains function calls
+        has_function_call = False
+        for candidate in (response.candidates or []):
+            for part in (candidate.content.parts or []):
+                if part.function_call:
+                    has_function_call = True
+                    fc = part.function_call
+                    tool_calls_made.append(fc.name)
+                    if is_tty:
+                        print(f" {gray()}[tool: {fc.name}({', '.join(f'{k}={v!r}' for k, v in (fc.args or {}).items())})]{reset()}", file=sys.stderr)
+                    result_str = _execute_tool(fc)
+                    # Build function response and append to contents for next turn
+                    contents = [
+                        *([contents] if isinstance(contents, str) else contents),
+                        response.candidates[0].content,
+                        types.Content(
+                            role="user",
+                            parts=[types.Part(function_response=types.FunctionResponse(
+                                name=fc.name,
+                                response={"result": result_str},
+                            ))],
+                        ),
+                    ]
+                    break  # Process one tool call at a time
+            if has_function_call:
+                break
+
+        if not has_function_call:
+            break
+
+    elapsed = time.time() - t0
+    text = response.text or ""
+    prompt_tokens = 0
+    response_tokens = 0
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+        response_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+
+    return text, elapsed, prompt_tokens, response_tokens, tool_calls_made
+
 # Main
 
 def main():
@@ -136,6 +238,8 @@ def main():
     parser.add_argument("--no-stream", action="store_true", help="Disable streaming")
     parser.add_argument("--no-banner", action="store_true", help="Hide ASCII banner")
     parser.add_argument("--raw", action="store_true", help="Raw output, no formatting")
+    parser.add_argument("--agent", action="store_true",
+                        help="Enable file system tools (read, list, search)")
     args = parser.parse_args()
 
     # Determine display mode
@@ -164,6 +268,21 @@ def main():
     )
     if args.system:
         config.system_instruction = args.system
+
+    # Agent mode: attach file system tools
+    if args.agent:
+        config.tools = AGENT_TOOLS
+        cwd = os.getcwd()
+        tool_hint = (
+            f"You have read-only access to the user's file system. "
+            f"Current working directory: {cwd}\n"
+            f"Use the available tools (read_file, list_directory, search_files) "
+            f"to browse and read files when needed to answer the user's question."
+        )
+        if config.system_instruction:
+            config.system_instruction = tool_hint + "\n\n" + config.system_instruction
+        else:
+            config.system_instruction = tool_hint
 
     # Resolve --file patterns and read contents
     file_context = _resolve_files(args.file)
@@ -197,7 +316,16 @@ def main():
                 prompt_tokens = 0
                 response_tokens = 0
 
-                if stream:
+                if args.agent:
+                    # Agent mode uses non-streaming to support tool calls
+                    response = chat.send_message(user_msg)
+                    elapsed = time.time() - t0
+                    text = response.text or ""
+                    print(text, end="")
+                    if hasattr(response, "usage_metadata") and response.usage_metadata:
+                        prompt_tokens = getattr(response.usage_metadata, "prompt_token_count", 0) or 0
+                        response_tokens = getattr(response.usage_metadata, "candidates_token_count", 0) or 0
+                elif stream:
                     last = None
                     for chunk in chat.send_message_stream(user_msg):
                         if chunk.text:
@@ -240,7 +368,12 @@ def main():
                 prompt_tokens = 0
                 response_tokens = 0
 
-                if stream:
+                if args.agent:
+                    # Agent mode: non-streaming with tool-call loop
+                    text, elapsed, prompt_tokens, response_tokens, tool_calls = \
+                        _agent_generate(client, model, prompt, config, is_tty)
+                    print(text, end="")
+                elif stream:
                     last = None
                     for chunk in client.models.generate_content_stream(
                         model=model, contents=prompt, config=config,
