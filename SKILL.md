@@ -40,8 +40,22 @@ gemma "Review this code" --system "You are a senior code reviewer"
 
 Prompts may and should get bigger and more complex respectively to the task at hand.
 
-Use `Bash` tool calls to run multiple Gemma agents simultaneously.
-Run it as many times as user asked you to.
+## Parallelism
+
+**CRITICAL**: To run multiple agents truly in parallel, launch them as background shell jobs in a **single Bash call** using `&` and `wait`. Multiple separate Bash tool calls run sequentially — do NOT use that approach for parallel work.
+
+```bash
+# Correct — all agents launch simultaneously, output saved to temp files:
+gemma "prompt 1" --raw > /tmp/gemma_1.txt 2>&1 &
+gemma "prompt 2" --raw > /tmp/gemma_2.txt 2>&1 &
+gemma "prompt 3" --raw > /tmp/gemma_3.txt 2>&1 &
+wait
+echo "=== AGENT 1 ===" && cat /tmp/gemma_1.txt
+echo "=== AGENT 2 ===" && cat /tmp/gemma_2.txt
+echo "=== AGENT 3 ===" && cat /tmp/gemma_3.txt
+```
+
+Always use `--raw` flag for multi-agent runs — suppresses the ASCII banner and color codes for clean output.
 
 ## Flags
 

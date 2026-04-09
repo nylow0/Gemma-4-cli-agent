@@ -1,13 +1,16 @@
 import argparse
 import glob
 import os
+import random
 import shutil
 import sys
 import time
 
-# Enable ANSI escape sequences on Windows
+# Enable ANSI escape sequences and fix UTF-8 output on Windows
 if os.name == "nt":
     os.system("")
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # ANSI 
 
@@ -158,6 +161,25 @@ def search_files(pattern: str, directory: str = ".") -> str:
         return f"Error searching: {e}"
 
 AGENT_TOOLS = [read_file, list_directory, search_files]
+
+MAX_RETRIES = 5
+
+def _is_retryable(e):
+    """Check if an exception is a transient error worth retrying."""
+    err_str = str(e).lower()
+    type_name = type(e).__name__.lower()
+    retryable_strings = ["429", "resource_exhausted", "ssl", "timeout",
+                         "connection", "remotedisconnected", "broken pipe",
+                         "reset by peer", "503", "500"]
+    retryable_types = ["sslerror", "connecterror", "timeout", "readtimeout",
+                       "connectionerror", "remotedisconnected", "networkerror"]
+    return (any(s in err_str for s in retryable_strings) or
+            any(t in type_name for t in retryable_types))
+
+def _retry_wait(attempt):
+    """Exponential backoff with jitter."""
+    base = 2 ** attempt
+    return base + random.uniform(0, base)
 
 def _execute_tool(function_call):
     """Execute a function call from the model and return the result string."""
@@ -353,16 +375,17 @@ def main():
                     print()
 
             except Exception as e:
-                err_str = str(e)
-                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                    print(f"\n {red()}✗ Rate limited by API.{reset()}", file=sys.stderr)
+                if _is_retryable(e):
+                    wait = _retry_wait(0)
+                    print(f"\n {red()}✗ {e} — retrying in {wait:.1f}s...{reset()}", file=sys.stderr)
+                    time.sleep(wait)
                 else:
                     error(str(e))
                 print()
 
     else:
-        # Retry with exponential backoff for single-shot command
-        for attempt in range(3):
+        # Retry with exponential backoff + jitter
+        for attempt in range(MAX_RETRIES):
             try:
                 t0 = time.time()
                 prompt_tokens = 0
@@ -407,13 +430,12 @@ def main():
                 return
 
             except Exception as e:
-                err_str = str(e)
-                if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str) and attempt < 2:
-                    wait = 2 ** attempt
+                if _is_retryable(e) and attempt < MAX_RETRIES - 1:
+                    wait = _retry_wait(attempt)
                     if is_tty:
-                        print(f"\n {gray()}rate limited, retrying in {wait}s...{reset()}", file=sys.stderr)
+                        print(f"\n {gray()}error: {e}, retrying in {wait:.1f}s...{reset()}", file=sys.stderr)
                     else:
-                        print(f"Rate limited, retrying in {wait}s...", file=sys.stderr)
+                        print(f"Error: {e}, retrying in {wait:.1f}s...", file=sys.stderr)
                     time.sleep(wait)
                 else:
                     error(str(e))
