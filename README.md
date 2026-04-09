@@ -2,7 +2,7 @@
 
 A lightweight CLI tool for running Gemma 4 31B through Google AI Studio. I built it as a Claude Code skill for parallelizing workflows — delegate tasks, etc.
 
-Supports reading files and glob patterns directly as context, so Gemma can reason over your codebase without manual copy-pasting. Also the free tier api of this model is pretty generous, so it's useful af since I'm a broke student lol.
+Supports reading files and glob patterns directly as context, so Gemma can reason over your codebase without manual copy-pasting. Also has an agent mode where Gemma can autonomously browse and read files from your file system. Also the free tier api of this model is pretty generous, so it's useful af since I'm a broke student lol.
 
 ```
 ╔════════════════════════════════════════════════════╗
@@ -19,10 +19,12 @@ Supports reading files and glob patterns directly as context, so Gemma can reaso
 
 ## Setup
 
-1. Install the dependency:
+1. Clone and install:
 
 ```bash
-pip install google-genai
+git clone https://github.com/nylow0/Gemma-4-cli-agent.git
+cd Gemma-4-cli-agent
+pip install -e .
 ```
 
 2. Set your API key (get one at [aistudio.google.com](https://aistudio.google.com)):
@@ -35,30 +37,31 @@ setx GOOGLE_AI_STUDIO_KEY your-key-here
 export GOOGLE_AI_STUDIO_KEY=your-key-here
 ```
 
-3. Make `gemma` available as a command:
-
-**Windows (CMD/PowerShell):** Create `gemma.bat` in a directory on your PATH:
-
-```bat
-@echo off
-python "C:\path\to\gemma-skill\src\gemma.py" %*
-```
-
-**Bash/macOS/Linux:** Symlink or alias:
-
-```bash
-ln -s /path/to/gemma-skill/src/gemma.py ~/.local/bin/gemma
-chmod +x /path/to/gemma-skill/src/gemma.py
-```
+That's it. `gemma` is now available as a command.
 
 ## Usage
 
 ```bash
+# Basic prompt
 gemma "What is quantum computing?"
-gemma "Review this code for bugs" --file src/main.py --raw
-gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py" --raw
-gemma "Review this code" --system "You are a senior code reviewer" --temperature 0.3
-gemma "Summarize this" --max-tokens 1024 --no-banner
+
+# Pre-load files as context
+gemma "Review this code for bugs" --file src/main.py
+
+# Multiple files and glob patterns
+gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py"
+
+# Agent mode — Gemma autonomously browses and reads your files
+gemma "Find the main entry point and review it for issues" --agent
+
+# Agent mode with a persona
+gemma "Review the project structure and suggest improvements" --agent --system "You are a senior architect"
+
+# Custom persona
+gemma "Review this code" --system "You are a senior code reviewer"
+
+# Raw output (no banner, no colors — useful for piping)
+gemma "Summarize this" --raw
 ```
 
 ## Flags
@@ -66,13 +69,19 @@ gemma "Summarize this" --max-tokens 1024 --no-banner
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--file` | none | File path or glob pattern to include as context (repeatable) |
-| `--system` | none | System instruction |
-| `--temperature` | 0.7 | Generation temperature (0.0–2.0) |
+| `--agent` | off | Enable file system tools — Gemma can autonomously read files, list dirs, search |
+| `--system` | none | System instruction / persona |
+| `--temperature` | 0.7 | Generation temperature (0.0-2.0) |
 | `--max-tokens` | 8192 | Max output tokens |
 | `--model` | gemma-4-31b-it | Model identifier override |
 | `--no-stream` | off | Disable streaming output |
 | `--no-banner` | off | Hide ASCII art banner |
 | `--raw` | off | Raw output, no formatting (for piping) |
+
+## --file vs --agent
+
+- **`--file`**: Pre-loads specific files into the prompt. You pick which files Gemma sees.
+- **`--agent`**: Gives Gemma read-only file system tools (`read_file`, `list_directory`, `search_files`). Gemma decides what to read. Use when you don't know which files matter or Gemma needs to explore.
 
 ## Claude Code Skill
 
