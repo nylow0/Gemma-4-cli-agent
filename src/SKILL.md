@@ -10,31 +10,40 @@ Delegate tasks to Gemma 4 31B via Google AI Studio API.
 
 Requires `GOOGLE_AI_STUDIO_KEY` or `GEMINI_API_KEY` env var.
 
+## Critical AI Usage Notes
+
+**⚠️ DO NOT run `gemma` without arguments!** It will launch an infinite interactive REPL loop, which will hang your Bash tool execution. You MUST always provide a prompt argument.
+**✅ ALWAYS use the `--raw` flag** when parsing output programmatically. This removes the ASCII art banner and ANSI escape sequences, keeping the output clean for context.
+
 ## Usage
 
 ```bash
-gemma "your prompt here"
-gemma "your prompt" --system "You are a code reviewer" --temperature 0.3 --max-tokens 4096
-```
+# Basic task delegation
+gemma "Analyze these concepts: ..." --raw
 
-Call `gemma` multiple times in parallel Bash tool calls to run multiple Gemma agents simultaneously.
+# With a specific persona and strict temperature
+gemma "Review this code" --system "You are a senior code reviewer" --temperature 0.3 --raw
+
+```
+Prompts may and should get bigger and more complex respectively to the task at hand.
+
+Changing the temperature should not be done often, but if you really think this parameter may help the user achieve the best results, you can tune it a little bit, but usually don't touch it.
+
+Use `Bash` tool calls to run multiple Gemma agents simultaneously.
+Run it as much times as user asked you to.
 
 ## Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--system` | none | System instruction |
-| `--temperature` | 0.7 | Generation temperature |
-| `--max-tokens` | 8192 | Max output tokens |
-| `--model` | gemma-4-31b-it | Model override |
-| `--no-stream` | off | Disable streaming |
-| `--no-banner` | off | Hide ASCII banner |
-| `--raw` | off | Raw output, no formatting |
+| `--system` | none | System instruction / Persona |
+| `--temperature` | 0.7 | Generation temperature (0.0–2.0) |
+| `--max-tokens` | 8192 | Maximum output tokens generated |
+| `--model` | gemma-4-31b-it | Model override if needed |
+| `--no-stream` | off | Disable streaming (useful for scripts) |
+| `--no-banner` | off | Hide ASCII banner (implied by --raw) |
+| `--raw` | off | Raw output, no formatting, ideal for AI |
 
 ## When to use
 
-- Offload research or analysis tasks
-- Get a second opinion on code changes
-- Run multiple parallel investigations
-- Brainstorm or generate alternatives
-- Any subtask that benefits from delegation
+Only use this skill when the user explicitly asks you to use it. 
