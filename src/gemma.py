@@ -1,4 +1,5 @@
 import argparse
+import glob
 import os
 import shutil
 import sys
@@ -83,6 +84,41 @@ def print_footer(elapsed, prompt_tokens, response_tokens):
 def error(msg):
     print(f"\n {red()}✗ {msg}{reset()}", file=sys.stderr)
 
+# File context
+
+def _resolve_files(patterns):
+    """Expand glob patterns, read files, return a single context string."""
+    if not patterns:
+        return ""
+    paths = []
+    for pattern in patterns:
+        expanded = glob.glob(pattern, recursive=True)
+        if expanded:
+            paths.extend(expanded)
+        elif os.path.isfile(pattern):
+            paths.append(pattern)
+        else:
+            print(f"Warning: no files matched '{pattern}'", file=sys.stderr)
+    if not paths:
+        return ""
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for p in paths:
+        norm = os.path.normpath(p)
+        if norm not in seen:
+            seen.add(norm)
+            unique.append(norm)
+    blocks = []
+    for filepath in unique:
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            blocks.append(f"### File: {filepath}\n```\n{content}\n```")
+        except Exception as e:
+            print(f"Warning: could not read '{filepath}': {e}", file=sys.stderr)
+    return "\n\n".join(blocks)
+
 # Main
 
 def main():
@@ -91,6 +127,8 @@ def main():
         prog="gemma",
     )
     parser.add_argument("prompt", nargs="*", help="The prompt to send. If empty, starts interactive mode.")
+    parser.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="File path or glob pattern to include as context (repeatable)")
     parser.add_argument("--system", default=None, help="System instruction")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max-tokens", type=int, default=8192)
@@ -127,7 +165,12 @@ def main():
     if args.system:
         config.system_instruction = args.system
 
+    # Resolve --file patterns and read contents
+    file_context = _resolve_files(args.file)
+
     prompt = " ".join(args.prompt).strip()
+    if file_context:
+        prompt = file_context + "\n\n" + prompt if prompt else file_context
     interactive = not bool(prompt)
 
     # Banner

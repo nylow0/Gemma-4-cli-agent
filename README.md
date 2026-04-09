@@ -1,11 +1,8 @@
 # Gemma CLI
 
-So I created this thing to use multiple instances of Gemma 4 model in parallel for better optimization of my workflow. Since my hardware ain't that good, have to use a google api, which is luckily pretty generous for my purposes.
+A lightweight CLI tool for running Gemma 4 31B through Google AI Studio. I built it as a Claude Code skill for parallelizing workflows — delegate tasks, etc.
 
-The initial idea for this was to create a cli which can be called from claude code to have multiple cheap and effective subagents to work in parallel, so I also added a skill for it lol.
-
-### Little note
-This one was mostly written using Claude Code.
+Supports reading files and glob patterns directly as context, so Gemma can reason over your codebase without manual copy-pasting. Also the api of this is pretty generous, so it's good since I'm a broke student lol.
 
 ```
 ╔════════════════════════════════════════════════════╗
@@ -58,6 +55,8 @@ chmod +x /path/to/gemma-skill/src/gemma.py
 
 ```bash
 gemma "What is quantum computing?"
+gemma "Review this code for bugs" --file src/main.py --raw
+gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py" --raw
 gemma "Review this code" --system "You are a senior code reviewer" --temperature 0.3
 gemma "Summarize this" --max-tokens 1024 --no-banner
 ```
@@ -66,6 +65,7 @@ gemma "Summarize this" --max-tokens 1024 --no-banner
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--file` | none | File path or glob pattern to include as context (repeatable) |
 | `--system` | none | System instruction |
 | `--temperature` | 0.7 | Generation temperature (0.0–2.0) |
 | `--max-tokens` | 8192 | Max output tokens |
@@ -76,4 +76,8 @@ gemma "Summarize this" --max-tokens 1024 --no-banner
 
 ## Claude Code Skill
 
-Like I said in the description, this repo doubles as a [Claude Code](https://claude.ai/claude-code) skill. Add it to your skills directory and Claude can delegate tasks to Gemma automatically.
+This repo doubles as a [Claude Code](https://claude.ai/claude-code) skill. Add it to your skills directory and Claude can delegate tasks to Gemma automatically.
+
+## Note
+
+Was made with claude code.

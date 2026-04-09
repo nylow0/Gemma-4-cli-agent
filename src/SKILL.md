@@ -21,6 +21,12 @@ Requires `GOOGLE_AI_STUDIO_KEY` or `GEMINI_API_KEY` env var.
 # Basic task delegation
 gemma "Analyze these concepts: ..." --raw
 
+# With file context — Gemma reads the files directly
+gemma "Review this code for bugs" --file src/main.py --raw
+
+# Multiple files and glob patterns
+gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py" --raw
+
 # With a specific persona and strict temperature
 gemma "Review this code" --system "You are a senior code reviewer" --temperature 0.3 --raw
 
@@ -36,6 +42,7 @@ Run it as much times as user asked you to.
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--file` | none | File path or glob pattern to include as context (repeatable) |
 | `--system` | none | System instruction / Persona |
 | `--temperature` | 0.7 | Generation temperature (0.0–2.0) |
 | `--max-tokens` | 8192 | Maximum output tokens generated |
