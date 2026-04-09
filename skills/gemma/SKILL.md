@@ -28,11 +28,11 @@ gemma "Review this code for bugs" --file src/main.py
 # Multiple files and glob patterns
 gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py"
 
-# With agent mode -- Gemma can autonomously browse and read files
-gemma "Find the main entry point and review it" --agent
+# Agent mode is on by default — Gemma autonomously browses and reads files
+gemma "Find the main entry point and review it"
 
 # Agent mode with a persona
-gemma "Review this project structure" --agent --system "You are a senior architect"
+gemma "Review this project structure" --system "You are a senior architect"
 
 # With a specific persona
 gemma "Review this code" --system "You are a senior code reviewer"

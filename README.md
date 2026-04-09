@@ -1,6 +1,6 @@
 # Gemma CLI
 
-A CLI tool for running Gemma 4 31B through Google AI Studio. Built as a Claude Code skill for parallelizing workflows — delegate tasks, get second opinions, run research agents in parallel.
+A CLI tool for running Gemma 4 31B through Google AI Studio, plus two Claude Code skills that let Claude delegate tasks to Gemma automatically.
 
 Agent mode is on by default: Gemma can browse your file system, fetch URLs, and search Google without any extra flags. The free tier API is generous af, so it's useful af since I'm a broke student lol.
 
@@ -115,9 +115,28 @@ cat /tmp/agent1.txt /tmp/agent2.txt /tmp/agent3.txt
 
 The free tier allows 15 requests/minute, so running 3–5 agents in parallel works fine.
 
-## Claude Code Skill
+## Claude Code Skills
 
-This repo doubles as a [Claude Code](https://claude.ai/claude-code) skill. Add it to your skills directory and Claude can delegate tasks to Gemma automatically — parallel research, second opinions, codebase exploration.
+The `skills/` folder contains two [Claude Code](https://claude.ai/claude-code) skills. Install them by symlinking into `~/.claude/skills/`:
+
+```bash
+ln -s "$(pwd)/skills/gemma" ~/.claude/skills/gemma
+ln -s "$(pwd)/skills/gemma-research" ~/.claude/skills/gemma-research
+```
+
+### `gemma` — Single-agent delegation
+
+Claude delegates tasks to a single Gemma agent. Use for: second opinions on code, quick research, brainstorming, offloading subtasks.
+
+### `gemma-research` — Multi-agent research orchestration
+
+Implements fan-out/fan-in and stochastic consensus patterns. Claude fans out N agents (batched in groups of 5) with diverse cognitive lenses — different personas, methodologies, and perspectives — then synthesizes their outputs into a structured report.
+
+Four research modes, auto-detected from your query:
+- **explore** — brainstorming and idea generation, maximizes divergence, surfaces outliers
+- **consensus** — finds the best answer by ranking claims by independent agreement
+- **deep** — comprehensive coverage by assigning each agent a different PESTEL facet
+- **compare** — structured pros/cons with adversarial cross-checking between options
 
 ## Note
 
