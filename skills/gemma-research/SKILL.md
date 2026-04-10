@@ -1,164 +1,126 @@
 ---
 name: gemma-research
-description: Multi-agent research orchestration using Gemma 4. Fan out N agents with diverse cognitive lenses, collect results, synthesize into a structured report. Use for any research task that benefits from multiple perspectives — brainstorming, finding the best solution, deep analysis, or comparing options.
+description: Use this skill for multi-agent fan-out and synthesis with the local Gemma CLI when a task benefits from several independent passes, contrasting personas, or broad evidence gathering.
 allowed-tools: [Bash, Read, Write]
 ---
 
-# Gemma Research — Multi-Agent Research Orchestration
+# Gemma Research
 
-This skill implements **fan-out/fan-in** and **stochastic consensus** patterns to produce high-quality research by running multiple Gemma agents in parallel with diverse cognitive lenses, then synthesizing their outputs.
+This skill orchestrates multiple `gemma` runs, collects the outputs, and synthesizes them in Claude.
 
-## When to Use
+Use it for:
+- broad research
+- comparison work
+- brainstorming with diverse lenses
+- consensus-seeking across multiple independent runs
+- deep dives where separate agents should cover different angles
 
-Use this skill when the user asks you to research something, explore ideas, find the best option, deeply understand a topic, or compare alternatives — and the task would benefit from multiple independent perspectives rather than a single answer.
+The current Gemma program adds two important capabilities that this skill should actively use:
+- `--system` for clean persona/lens assignment per agent
+- `--file` for shared text or multimodal evidence across all agents
 
 ## Critical Rules
 
-- **NEVER run `gemma` without a prompt argument** — it launches an interactive REPL that hangs Bash.
-- **Always use `--raw`** on every gemma call — suppresses banners and colors for clean output.
-- **Do NOT change `--temperature`** unless the user explicitly asks.
-- **Max 5 agents per batch** — use shell background jobs (`&` + `wait`) within a single Bash call.
-- **Always switch to Sonnet model for synthesis** — it has the larger context window needed to ingest all agent reports. Output `/model sonnet` to the user before synthesizing.
+- Never run `gemma` without a prompt argument. That opens the interactive REPL and blocks the shell call.
+- Always use `--raw` for research fan-out. This keeps output parseable and removes banner/thinking noise.
+- Treat agent mode as always on. Do not use `--no-agent`.
+- Do not rely on `/model`, `/agent`, or other unsupported slash commands.
+- Do not change `--temperature` unless the user explicitly asks.
+- Prefer up to 5 concurrent Gemma jobs per batch unless the user explicitly wants more aggressive parallelism.
+- Synthesize inside Claude after collection. Do not open Gemma interactively for synthesis.
 
-## Research Protocol
+## Research Pattern
 
-### Phase 1: Decompose
+### 1. Pick a mode
 
-Analyze the user's query and determine:
+- `explore`: maximize diversity and idea generation
+- `consensus`: independent runs answering the same core question
+- `deep`: assign different facets of the same topic
+- `compare`: make the strongest case for each option, then cross-check
 
-1. **Research mode** (auto-detect or user-specified):
+### 2. Design the runs
 
-| Mode | When | Signal words |
-|------|------|-------------|
-| **explore** | Brainstorming, generating ideas, creative options | "ideas", "possibilities", "brainstorm", "what could", "alternatives" |
-| **consensus** | Finding the best answer, factual questions, recommendations | "best", "should I", "recommend", "which one", "what is" |
-| **deep** | Comprehensive understanding of a topic | "explain", "understand", "how does", "deep dive", "comprehensive" |
-| **compare** | Choosing between specific options | "vs", "compare", "which is better", "pros and cons", "A or B" |
+For each agent, vary at least one of:
+- persona via `--system`
+- methodology in the prompt
+- scope constraint in the prompt
+- target audience in the prompt
 
-2. **Agent count** (N): Default 10. Range 5-15 based on complexity. Simple factual = 5, complex multi-faceted = 10-15.
+Use `--file` when all agents should see the same code, document, screenshot, PDF, or other evidence.
 
-3. **Sub-queries or angles**: Based on mode, break the research into distinct angles (see Phase 2).
-
-### Phase 2: Generate Diverse Prompts
-
-Each agent MUST get a unique prompt that combines elements from the 5 diversity axes below. The goal is **cognitive friction** — agents should NOT converge on the same "safe" answer.
-
-#### Diversity Axes
-
-**Axis 1 — Persona (who)**
-Skeptic, Optimist, Academic Researcher, Hands-on Practitioner, End-user/Consumer, Contrarian/Devil's Advocate, Futurist, Historian, Data Scientist, Cross-domain Generalist
-
-**Axis 2 — Perspective Lens (angle)**
-- Six Thinking Hats: White (pure facts/data), Red (intuition/gut feel), Black (risks/flaws), Yellow (benefits/value), Green (creative alternatives), Blue (meta-process)
-- PESTEL: Political, Economic, Sociocultural, Technological, Environmental, Legal
-- Dialectical: Thesis, Antithesis, Synthesis
-
-**Axis 3 — Methodology (how to think)**
-First principles decomposition, Analogical reasoning (find parallels in other domains), Falsification testing (try to prove it wrong), Backwards induction (start from desired end state), Quantitative/data-driven analysis
-
-**Axis 4 — Constraints (boundaries)**
-"Only use academic/scientific sources", "Focus only on developments from the last 6 months", "Ignore the most popular answer and find alternatives", "Consider only non-Western perspectives", "Focus on edge cases and failure modes"
-
-**Axis 5 — Audience Framing (target)**
-Executive brief (ROI/bottom line), Technical deep-dive (implementation details), Skeptical investor (find weaknesses), Policy maker (societal impact), Beginner (explain simply)
-
-#### Mode-Specific Prompt Strategy
-
-**Explore mode**: Maximize divergence. Each agent gets a DIFFERENT persona + methodology + constraint combination. Include at least 2 "contrarian" or "weird angle" agents. Example prompt structure:
-> "You are a [PERSONA]. Research: [QUERY]. Use [METHODOLOGY] reasoning. [CONSTRAINT]. Provide your unique perspective — do NOT give a generic answer. Surprising, non-obvious insights are more valuable than safe ones. Use Google Search to find current information."
-
-**Consensus mode**: Same core question, but each agent has a different persona to prevent sycophantic convergence. Example:
-> "You are a [PERSONA]. Independently research and answer: [QUERY]. Provide your honest assessment with evidence. Do NOT hedge — commit to a clear answer. Use Google Search for current data."
-
-**Deep mode**: Each agent covers a different PESTEL facet or domain angle. Example:
-> "Research [QUERY] focusing EXCLUSIVELY on the [FACET] dimension. Go deep on this single angle. Use Google Search. Provide thorough analysis with specific examples and data."
-
-**Compare mode**: Each agent advocates for a different option. Example:
-> "You are an advocate for [OPTION]. Research and make the strongest possible case for [OPTION] over the alternatives. Use Google Search for current data. Be specific with evidence."
-
-### Phase 3: Execute (Fan-Out)
-
-Run agents in batches of up to 5, using shell background jobs in a single Bash call:
+Examples:
 
 ```bash
-gemma "PROMPT_1" --raw > /tmp/gemma_research_1.txt 2>&1 &
-gemma "PROMPT_2" --raw > /tmp/gemma_research_2.txt 2>&1 &
-gemma "PROMPT_3" --raw > /tmp/gemma_research_3.txt 2>&1 &
-gemma "PROMPT_4" --raw > /tmp/gemma_research_4.txt 2>&1 &
-gemma "PROMPT_5" --raw > /tmp/gemma_research_5.txt 2>&1 &
-wait
-echo "=== Batch 1 complete ==="
+gemma "Evaluate this architecture for operational risk" --system "You are a skeptical staff platform engineer" --file architecture.md --raw
+gemma "Find the strongest case for this product direction" --system "You are an optimistic product strategist" --file brief.pdf --raw
+gemma "Summarize what this screenshot reveals about the UX failure" --system "You are a detail-oriented UX reviewer" --file screenshot.png --raw
 ```
 
-Then repeat for the next batch (agents 6-10, then 11-15, etc.).
+### 3. Execute in batches
 
-**Important**: Use a timeout of 300000ms (5 minutes) for each Bash call to allow agents time to use Google Search and browse.
+Run each batch in one shell invocation:
 
-### Phase 4: Collect (Fan-In)
+```bash
+gemma "PROMPT 1" --system "LENS 1" --raw > /tmp/gemma_research_1.txt 2>&1 &
+gemma "PROMPT 2" --system "LENS 2" --raw > /tmp/gemma_research_2.txt 2>&1 &
+gemma "PROMPT 3" --system "LENS 3" --raw > /tmp/gemma_research_3.txt 2>&1 &
+gemma "PROMPT 4" --system "LENS 4" --raw > /tmp/gemma_research_4.txt 2>&1 &
+gemma "PROMPT 5" --system "LENS 5" --raw > /tmp/gemma_research_5.txt 2>&1 &
+wait
+```
 
-After all batches complete:
-1. Read each output file using the Read tool
-2. Note which agents produced useful output vs empty/error responses
-3. Tag each result with the lens combination it was assigned (for traceability in synthesis)
+Repeat for later batches if needed.
 
-### Phase 5: Synthesize
+### 4. Collect and tag results
 
-**Switch to Sonnet model** before synthesizing — tell the user you're switching for the larger context window.
+For each output:
+- record the prompt or lens that produced it
+- mark failures or empty responses
+- keep useful dissent instead of collapsing it away
 
-Then synthesize ALL collected agent reports based on mode:
+### 5. Synthesize in Claude
 
-**Explore synthesis**:
-- List EVERY unique idea/insight across all agents
-- Group by theme, then sort by novelty (most unusual first)
-- Outlier ideas that only 1 agent mentioned get their own "Wild Cards" section — these are often the most valuable
-- Do NOT filter out "weird" ideas — that's the whole point of explore mode
+Apply these rules:
+- disagreement is signal
+- deduplicate overlaps
+- weight specific evidence over vague claims
+- keep minority positions visible when they are well argued
+- note when several agents converge suspiciously fast on the same generic answer
 
-**Consensus synthesis**:
-- Count how many agents independently arrived at each claim/recommendation
-- Rank by agreement frequency (e.g., "8/10 agents agree that...")
-- Claims with <60% agreement get flagged as "Uncertain / Disputed"
-- Show the minority dissent — what did the disagreeing agents say and why?
-- Weight by evidence quality: agents that cited sources > unsupported claims
+## Mode Guidance
 
-**Deep synthesis**:
-- Weave all facets into a comprehensive narrative
-- Identify contradictions between agents — these are high-value signal, not noise
-- Identify gaps: what important facet did NO agent cover? Note it explicitly.
-- Use section headers for each major facet
+### Explore
 
-**Compare synthesis**:
-- Build a structured comparison matrix (rows = criteria, columns = options)
-- Cross-check: use each advocate's criticisms of other options as counterpoints
-- Provide a clear final recommendation with reasoning
-- Note where the "losing" option actually has legitimate advantages
+- Maximize divergence.
+- Include at least one contrarian or weird-angle run.
+- Sort outputs by novelty, not by agreement.
 
-### Synthesis Intelligence Rules
+### Consensus
 
-These rules apply regardless of mode:
-- **Disagreement is signal, not noise** — always surface it explicitly
-- **Deduplicate** overlapping findings across agents
-- **Weight by evidence**: cited sources and specific data > vague claims
-- **Anti-sycophancy**: if all agents suspiciously agree on everything, note that the consensus may be a shared bias rather than truth
-- **Failed agents are OK**: N provides redundancy. If 2/10 agents failed, synthesize from the 8 that worked.
-- **Traceability**: when citing a specific finding, note which agent (lens) produced it
+- Ask the same core question with different personas.
+- Count independent agreement.
+- Surface disputed claims explicitly.
+
+### Deep
+
+- Assign one facet per run.
+- Combine the results into a coherent end-to-end picture.
+- Call out uncovered facets.
+
+### Compare
+
+- Give each option at least one advocate run.
+- Use additional runs to critique the strongest arguments from the other side.
+- End with a recommendation plus the legitimate strengths of the losing option.
 
 ## Output Format
 
-Present the final synthesis directly to the user as a well-structured report. Include:
-1. **Research summary**: what was researched, mode used, N agents deployed, how many returned results
-2. **The synthesis** (formatted per mode above)
-3. **Confidence assessment**: overall confidence level based on agent agreement and evidence quality
-4. **Key uncertainties**: what remains unclear or disputed
+Return:
+1. the research goal and mode
+2. how many Gemma runs were launched and how many produced usable output
+3. the synthesized findings
+4. confidence and key uncertainties
 
-## Example Invocation
+## When To Use
 
-User: "Research the best backend framework for a startup in 2026"
-
-Claude's actions:
-1. Mode: **consensus** (user wants "best")
-2. N: 10 agents
-3. Generate 10 prompts with diverse personas (Skeptic, Startup CTO, Enterprise Architect, DevOps Engineer, etc.)
-4. Run in 2 batches of 5
-5. Collect results
-6. Switch to Sonnet, synthesize with consensus rules
-7. Present ranked report with agreement levels
+Use this skill when one Gemma answer is not enough and the task genuinely benefits from structured fan-out and synthesis.

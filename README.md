@@ -54,6 +54,11 @@ gemma "Review this code for bugs" --file src/main.py
 # Multiple files and glob patterns
 gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py"
 
+# Multimodal — pass images, video, audio, or PDFs
+gemma "Describe this image" --file photo.jpg
+gemma "Transcribe this audio" --file recording.mp3
+gemma "Summarize this document" --file report.pdf
+
 # Custom persona
 gemma "Review this code" --system "You are a senior code reviewer"
 
@@ -63,8 +68,65 @@ gemma "Summarize this" --raw
 # Disable agent tools for a plain LLM call
 gemma "What is quantum computing?" --no-agent
 
+# Hide thinking blocks
+gemma "Explain recursion" --no-think
+
 # Interactive mode — just run gemma with no prompt
 gemma
+```
+
+## Thinking Display
+
+When Gemma uses chain-of-thought reasoning, the thinking process is rendered in a clean bordered box — separate from the actual answer:
+
+```
+ 💭 Thinking ────────────────────────────────────────
+ │ Let me analyze the code structure...
+ │ I see there are three main modules...
+ │ The entry point is in main.py...
+ ────────────────────────────────────────────────────
+
+Here is my analysis of your code:
+1. The main entry point is well-structured...
+```
+
+Toggle thinking visibility with `--no-think` or `/think` in interactive mode.
+
+## Slash Commands
+
+Slash commands work both in interactive mode and from the CLI:
+
+```bash
+# From the command line
+gemma /help
+gemma /model
+
+# Inside interactive mode
+/help              Show available commands
+/clear             Clear conversation history
+/model [name]      Show or change the model
+/system [text]     Show or set system instruction
+/file <path>       Attach a file to the next message
+/files             Show attached files
+/agent             Toggle agent mode (tools)
+/think             Toggle thinking display
+/temp <value>      Set temperature (0.0–2.0)
+/exit              Exit interactive mode
+```
+
+### Attaching files mid-conversation
+
+In interactive mode, use `/file` to attach files before your next message:
+
+```
+ ❯ /file screenshot.png
+ 📎 Attached: screenshot.png
+
+ ❯ What's wrong with this UI?
+ 💭 Thinking ────────────────────────────────────────
+ │ Looking at the screenshot...
+ ────────────────────────────────────────────────────
+ I can see a few issues with the layout...
 ```
 
 ## Agent Tools (on by default)
@@ -82,6 +144,19 @@ Gemma has read-only access to your file system, the web, and Google Search out o
 
 Use `--no-agent` to disable all tools and make a plain LLM call.
 
+## Multimodal Support
+
+Gemma 4 is natively multimodal. Pass media files with `--file` or `/file`:
+
+| Type | Extensions |
+|------|-----------|
+| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp` |
+| Video | `.mp4`, `.mov`, `.avi`, `.webm` |
+| Audio | `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a` |
+| Documents | `.pdf` |
+
+Files under 20MB are sent inline. Larger files are uploaded via the Files API.
+
 ## --file vs agent mode
 
 - **`--file`**: You explicitly pre-load files into the prompt before the call. Use when you know exactly which files are relevant and want them always included.
@@ -91,7 +166,7 @@ Use `--no-agent` to disable all tools and make a plain LLM call.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--file` | none | File path or glob pattern to include as context (repeatable) |
+| `--file` | none | File path or glob to include as context (repeatable) |
 | `--no-agent` | off | Disable agent tools for a plain LLM call |
 | `--system` | none | System instruction / persona |
 | `--temperature` | 0.7 | Generation temperature (0.0-2.0) |
@@ -99,6 +174,7 @@ Use `--no-agent` to disable all tools and make a plain LLM call.
 | `--model` | gemma-4-31b-it | Model identifier override |
 | `--no-stream` | off | Disable streaming output |
 | `--no-banner` | off | Hide ASCII art banner |
+| `--no-think` | off | Hide thinking blocks |
 | `--raw` | off | Raw output, no formatting (for piping) |
 
 ## Running parallel agents

@@ -1,83 +1,98 @@
 ---
 name: gemma
-description: This skill should be used when Claude needs to delegate a task to Gemma 4 31B, run parallel research, get a second opinion on code, brainstorm ideas, or offload any subtask to a Gemma agent. Use when you need extra processing power or a different perspective on a problem.
+description: Use this skill when Claude needs to delegate a bounded task to the local Gemma CLI, get a second opinion, offload a subtask, or use Gemma's read-only agent tools or multimodal file handling.
 allowed-tools: [Bash]
 ---
 
-# Gemma 4 31B Agent
+# Gemma CLI Delegation
 
-Delegate tasks to Gemma 4 31B via Google AI Studio API.
+Delegate a single task to the local `gemma` CLI.
 
-Requires `GOOGLE_AI_STUDIO_KEY` or `GEMINI_API_KEY` env var.
+The current program supports:
+- agent mode by default and in practice always on
+- read-only file and web tools
+- multimodal `--file` input for text, images, video, audio, and PDFs
+- system personas via `--system`
+- thinking blocks in TTY mode
+- an interactive REPL with slash commands for human use
 
-## Critical AI Usage Notes
+It requires `GOOGLE_AI_STUDIO_KEY` or `GEMINI_API_KEY` in the environment.
 
-**DO NOT run `gemma` without arguments!** It will launch an infinite interactive REPL loop, which will hang your Bash tool execution. You MUST always provide a prompt argument.
+## Critical Rules
 
-**Temperature: Do NOT change the `--temperature` from the default (0.7) unless the user explicitly asks for a different temperature.** Never adjust temperature on your own initiative.
+- Never run `gemma` with no prompt from Claude Code automation. That starts the interactive REPL and blocks the shell call.
+- Treat agent mode as always enabled. Do not use `--no-agent`; the current CLI does not support it.
+- Use `--raw` whenever Claude needs machine-clean output or when you launch concurrent Gemma jobs. `--raw` suppresses banner/color output and strips thinking blocks from stdout.
+- Do not change `--temperature` unless the user explicitly asks for a different value.
+- Use `--system` for lens/persona changes instead of stuffing that instruction into a long prompt when a clean role separation helps.
+- Use `--file` whenever specific local context should be guaranteed in the prompt. This now works for text files and media files.
+- Do not rely on unsupported controls such as `/model`, `/agent`, or `--no-agent`.
+- Do not depend on `--no-stream` to change agent behavior in automated runs; the current implementation still executes delegated agent tasks through the tool-enabled streaming path.
 
-## Usage
+## Normal Usage
 
 ```bash
-# Basic task delegation
-gemma "Analyze these concepts: ..."
-
-# With file context -- pre-load specific files into the prompt
-gemma "Review this code for bugs" --file src/main.py
-
-# Multiple files and glob patterns
+gemma "Review this algorithm for edge cases"
 gemma "Explain how these modules interact" --file src/auth.py --file "src/utils/*.py"
-
-# Agent mode is on by default — Gemma autonomously browses and reads files
-gemma "Find the main entry point and review it"
-
-# Agent mode with a persona
-gemma "Review this project structure" --system "You are a senior architect"
-
-# With a specific persona
-gemma "Review this code" --system "You are a senior code reviewer"
+gemma "Review this code as a senior Python engineer" --system "You are a senior Python code reviewer"
+gemma "Summarize the important findings only" --raw
 ```
 
-Prompts may and should get bigger and more complex respectively to the task at hand.
+## Multimodal Usage
 
-## Parallelism
+`--file` is no longer text-only.
 
-**CRITICAL**: To run multiple agents truly in parallel, launch them as background shell jobs in a **single Bash call** using `&` and `wait`. Multiple separate Bash tool calls run sequentially — do NOT use that approach for parallel work.
+Use it for:
+- source files or config files you want injected into the prompt
+- screenshots and images
+- video clips
+- audio recordings
+- PDFs
+
+Examples:
 
 ```bash
-# Correct — all agents launch simultaneously, output saved to temp files:
-gemma "prompt 1" --raw > /tmp/gemma_1.txt 2>&1 &
-gemma "prompt 2" --raw > /tmp/gemma_2.txt 2>&1 &
-gemma "prompt 3" --raw > /tmp/gemma_3.txt 2>&1 &
-wait
-echo "=== AGENT 1 ===" && cat /tmp/gemma_1.txt
-echo "=== AGENT 2 ===" && cat /tmp/gemma_2.txt
-echo "=== AGENT 3 ===" && cat /tmp/gemma_3.txt
+gemma "What is broken in this UI?" --file screenshot.png
+gemma "Transcribe and summarize this call" --file meeting.mp3
+gemma "Extract the key constraints from this spec" --file design.pdf
 ```
 
-Always use `--raw` flag for multi-agent runs — suppresses the ASCII banner and color codes for clean output.
+## Interactive Mode
 
-## Flags
+For human-driven use, running `gemma` with no prompt opens the interactive interface.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--file` | none | File path or glob pattern to include as context (repeatable) |
-| `--no-agent` | off | Disable agent tools (agent mode is ON by default) |
-| `--system` | none | System instruction / Persona |
-| `--temperature` | 0.7 | Generation temperature -- do NOT change unless user asks |
-| `--max-tokens` | 8192 | Maximum output tokens generated |
-| `--model` | gemma-4-31b-it | Model override if needed |
-| `--no-stream` | off | Disable streaming (useful for scripts) |
-| `--no-banner` | off | Hide ASCII banner |
-| `--raw` | off | Raw output, no formatting |
+Claude Code should avoid that for automation, but the supported slash commands are:
+- `/help`
+- `/clear`
+- `/system [text]`
+- `/file <path>`
+- `/files`
+- `/think`
+- `/temp <0.0-2.0>`
+- `/exit`
+- `/quit`
 
-## --file vs agent mode
+Do not mention or depend on `/model` or `/agent`; they are not implemented.
 
-Agent mode (file system + web + Google Search) is **on by default**. Use `--no-agent` to disable it.
+## Parallel Delegation
 
-- `--file`: Pre-loads specific files directly into the prompt. Use when you know exactly which files are relevant.
-- Agent mode (default): Gemma gets read-only file system tools (read_file, list_directory, search_files, grep_files), web access (fetch_url), and Google Search. Gemma decides what to read/search.
+If you need multiple Gemma calls in parallel, launch them in one shell invocation with background jobs and `wait`. Separate shell tool calls are not true parallelism.
 
-## When to use
+```bash
+gemma "Prompt 1" --raw > /tmp/gemma_1.txt 2>&1 &
+gemma "Prompt 2" --raw > /tmp/gemma_2.txt 2>&1 &
+gemma "Prompt 3" --raw > /tmp/gemma_3.txt 2>&1 &
+wait
+cat /tmp/gemma_1.txt /tmp/gemma_2.txt /tmp/gemma_3.txt
+```
 
-Only use this skill when the user explicitly asks you to use it.
+## Choosing Between Prompt, System, and File
+
+- Put the task itself in the main prompt.
+- Put stable role framing in `--system`.
+- Put concrete repo files or media artifacts in `--file`.
+- Prefer `--raw` for any result Claude will parse, compare, or synthesize.
+
+## When To Use
+
+Use this skill when the user wants Gemma specifically, or when a second model pass is materially useful and the overhead is justified.
