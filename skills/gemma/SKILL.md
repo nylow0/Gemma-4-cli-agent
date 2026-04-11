@@ -9,8 +9,8 @@ allowed-tools: [Bash]
 Delegate a single task to the local `gemma` CLI.
 
 The current program supports:
-- agent mode by default and in practice always on
-- read-only file and web tools
+- agent mode (always on, no flag toggles it)
+- read-only file and web tools plus Google Search
 - multimodal `--file` input for text, images, video, audio, and PDFs
 - system personas via `--system`
 - thinking blocks in TTY mode
@@ -21,13 +21,12 @@ It requires `GOOGLE_AI_STUDIO_KEY` or `GEMINI_API_KEY` in the environment.
 ## Critical Rules
 
 - Never run `gemma` with no prompt from Claude Code automation. That starts the interactive REPL and blocks the shell call.
-- Treat agent mode as always enabled. Do not use `--no-agent`; the current CLI does not support it.
+- Agent mode is always on. There is no flag to disable it.
 - Use `--raw` whenever Claude needs machine-clean output or when you launch concurrent Gemma jobs. `--raw` suppresses banner/color output and strips thinking blocks from stdout.
 - Do not change `--temperature` unless the user explicitly asks for a different value.
 - Use `--system` for lens/persona changes instead of stuffing that instruction into a long prompt when a clean role separation helps.
-- Use `--file` whenever specific local context should be guaranteed in the prompt. This now works for text files and media files.
-- Do not rely on unsupported controls such as `/model`, `/agent`, or `--no-agent`.
-- Do not depend on `--no-stream` to change agent behavior in automated runs; the current implementation still executes delegated agent tasks through the tool-enabled streaming path.
+- Use `--file` whenever specific local context should be guaranteed in the prompt. Works for text files and media files.
+- Do not rely on unsupported controls such as `--no-agent`, `--no-stream`, `/model`, or `/agent`. They do not exist.
 
 ## Normal Usage
 

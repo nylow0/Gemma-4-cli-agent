@@ -65,9 +65,6 @@ gemma "Review this code" --system "You are a senior code reviewer"
 # Raw output (no banner, no colors — useful for piping or parallel agents)
 gemma "Summarize this" --raw
 
-# Disable agent tools for a plain LLM call
-gemma "What is quantum computing?" --no-agent
-
 # Hide thinking blocks
 gemma "Explain recursion" --no-think
 
@@ -99,16 +96,13 @@ Slash commands work both in interactive mode and from the CLI:
 ```bash
 # From the command line
 gemma /help
-gemma /model
 
 # Inside interactive mode
 /help              Show available commands
 /clear             Clear conversation history
-/model [name]      Show or change the model
 /system [text]     Show or set system instruction
 /file <path>       Attach a file to the next message
 /files             Show attached files
-/agent             Toggle agent mode (tools)
 /think             Toggle thinking display
 /temp <value>      Set temperature (0.0–2.0)
 /exit              Exit interactive mode
@@ -129,9 +123,9 @@ In interactive mode, use `/file` to attach files before your next message:
  I can see a few issues with the layout...
 ```
 
-## Agent Tools (on by default)
+## Agent Tools
 
-Gemma has read-only access to your file system, the web, and Google Search out of the box. No flag needed.
+Agent mode is always on. Gemma has read-only access to your file system, the web, and Google Search out of the box. No flag needed.
 
 | Tool | What it does |
 |------|-------------|
@@ -141,8 +135,6 @@ Gemma has read-only access to your file system, the web, and Google Search out o
 | `grep_files` | Search file contents by regex |
 | `fetch_url` | Fetch a webpage and return its text |
 | `google_search` | Search Google (built-in, server-side) |
-
-Use `--no-agent` to disable all tools and make a plain LLM call.
 
 ## Multimodal Support
 
@@ -157,22 +149,22 @@ Gemma 4 is natively multimodal. Pass media files with `--file` or `/file`:
 
 Files under 20MB are sent inline. Larger files are uploaded via the Files API.
 
-## --file vs agent mode
+## `--file` vs agent discovery
 
-- **`--file`**: You explicitly pre-load files into the prompt before the call. Use when you know exactly which files are relevant and want them always included.
-- **Agent mode (default)**: Gemma decides what to read, search, or browse on its own. Use for open-ended tasks, codebase exploration, or anything that needs live information.
+- **`--file`**: pre-load specific files into the prompt. Use when you know exactly which files are relevant and want them guaranteed in context.
+- **Agent discovery**: let Gemma decide what to read, search, or browse on its own using its tools. Use for open-ended tasks, codebase exploration, or anything that needs live information.
+
+Both are always available — they are not mutually exclusive.
 
 ## Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--file` | none | File path or glob to include as context (repeatable) |
-| `--no-agent` | off | Disable agent tools for a plain LLM call |
 | `--system` | none | System instruction / persona |
 | `--temperature` | 0.7 | Generation temperature (0.0-2.0) |
 | `--max-tokens` | 8192 | Max output tokens |
 | `--model` | gemma-4-31b-it | Model identifier override |
-| `--no-stream` | off | Disable streaming output |
 | `--no-banner` | off | Hide ASCII art banner |
 | `--no-think` | off | Hide thinking blocks |
 | `--raw` | off | Raw output, no formatting (for piping) |
